@@ -1,0 +1,58 @@
+# OpenMFA requirements
+#
+# OpenMFA is a .NET (C#) Windows app, not a Python project: this file lists the
+# software to install, it is not for `pip install -r`. There are no NuGet
+# packages; everything below is installed separately.
+
+# ---------------------------------------------------------------------------
+# Operating system
+# ---------------------------------------------------------------------------
+# Windows 10 or 11, x64
+#   - The GUI is Windows Forms (net9.0-windows)
+#   - Tool paths assume the default x64 install folders under C:\Program Files
+#   - Smart Card service (SCardSvr) running; OpenSC's installer enables it
+#   - certreq.exe (built into Windows): used to create CSRs for MyEID cards
+
+# ---------------------------------------------------------------------------
+# To build and run
+# ---------------------------------------------------------------------------
+# .NET 9 SDK          https://dotnet.microsoft.com/download/dotnet/9.0
+#   Build and run:    dotnet run --project src/OpenMFA.GUI
+#   Just running a published build only needs the .NET 9 Desktop Runtime.
+
+# ---------------------------------------------------------------------------
+# Smart card tools
+# ---------------------------------------------------------------------------
+# OpenSC 0.26.1 or 0.27.x, full x64 installer
+#   https://github.com/OpenSC/OpenSC/releases
+#   Install to the default folder: C:\Program Files\OpenSC Project\OpenSC
+#   Use the full installer, not "Light": Light has no pkcs15-init profiles
+#   (myeid.profile), so MyEID initialization fails.
+#   Tools used:
+#     opensc-tool   detect readers (all cards)
+#     pkcs15-init   erase/initialize, generate keys, store certificates (MyEID)
+#     pkcs15-tool   read certificates, list card contents (MyEID)
+#     pkcs11-tool   sign the CSR with the YubiKey's slot 9A key (YubiKey)
+
+# YubiKey Manager CLI (ykman) >= 5.0 - only needed for YubiKeys
+#   https://www.yubico.com/support/download/yubikey-manager/
+#   Found in C:\Program Files\Yubico\YubiKey Manager CLI\,
+#   C:\Program Files\Yubico\YubiKey Manager\, or on PATH.
+#   Used for all YubiKey PIV operations (reset, PIN/PUK, keys, certificates).
+
+# ---------------------------------------------------------------------------
+# Hardware
+# ---------------------------------------------------------------------------
+# One of:
+#   - MyEID 4.5 card + PC/SC smart card reader
+#   - YubiKey with PIV (YubiKey 5 series). RSA 3072/4096 keys need firmware 5.7+.
+# Insert only the card/YubiKey being set up.
+
+# ---------------------------------------------------------------------------
+# Optional: SmartCardProvider (Windows logon credential provider, C++)
+# ---------------------------------------------------------------------------
+# Visual Studio 2022 with the "Desktop development with C++" workload
+#   (platform toolset v143)
+# Windows 10 SDK (10.0 or newer)
+# Administrator rights to register the DLL (register.bat)
+# See src/SmartCardProvider/README.txt
