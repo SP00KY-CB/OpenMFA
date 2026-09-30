@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using OpenMFA.SmartCard.MyEid;
+using OpenMFA.SmartCard.YubiKey;
 
 namespace OpenMFA.GUI;
 
@@ -11,6 +12,7 @@ public partial class WindowsLogonForm : Form
 {
     private MyEidCard? _card;
     private uint? _readerNumber;
+    private bool _isYubiKey;
 
     // UI Controls - initialized in InitializeComponent()
     private GroupBox grpReader = null!;
@@ -322,11 +324,14 @@ public partial class WindowsLogonForm : Form
 
                 var readers = await CardReader.DetectReadersAsync(Log);
                 var reader = readers.FirstOrDefault(r => r.Number == readerNum);
+                _isYubiKey = reader?.IsYubiKey ?? false;
 
                 txtReaderStatus.Text = $"Reader {readerNum}: {reader?.Name ?? "Unknown"} - Card present";
                 txtReaderStatus.BackColor = System.Drawing.Color.LightGreen;
 
                 Log($"✓ Reader detected: {reader?.Name}");
+                if (_isYubiKey)
+                    Log("  YubiKey detected - ERASE Card will reset the PIV application using ykman");
 
                 // Enable operations
                 btnInitialize.Enabled = true;
@@ -405,6 +410,12 @@ public partial class WindowsLogonForm : Form
         if (_card == null || !_readerNumber.HasValue)
         {
             MessageBox.Show("Please detect card first", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (_isYubiKey)
+        {
+            await ResetYubiKeyAsync();
             return;
         }
 
@@ -490,6 +501,56 @@ public partial class WindowsLogonForm : Form
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
+        }
+        finally
+        {
+            btnErase.Enabled = true;
+        }
+    }
+
+    private async Task ResetYubiKeyAsync()
+    {
+        var result = MessageBox.Show(
+            "⚠️ CRITICAL WARNING ⚠️\n\n" +
+            "This will RESET the YubiKey PIV application!\n\n" +
+            "• All PIV keys and certificates will be PERMANENTLY DELETED\n" +
+            "• PIN is reset to 123456, PUK to 12345678\n" +
+            "• Management key is reset to the default\n\n" +
+            "FIDO, OTP and OpenPGP on the YubiKey are not affected.\n\n" +
+            "Are you ABSOLUTELY SURE?",
+            "Confirm YubiKey PIV Reset",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Stop,
+            MessageBoxDefaultButton.Button2);
+
+        if (result != DialogResult.Yes) return;
+
+        try
+        {
+            btnErase.Enabled = false;
+            Log("=== Resetting YubiKey PIV ===");
+
+            var yubiKey = new YubiKeyPiv();
+            yubiKey.SetLogger(Log);
+            await yubiKey.ResetAsync(CancellationToken.None);
+
+            Log("✓ YubiKey PIV reset successfully");
+            MessageBox.Show(
+                "YubiKey PIV reset successfully!\n\n" +
+                "PIN: 123456\nPUK: 12345678\nManagement key: default",
+                "Success",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Log($"✗ YubiKey reset failed: {ex.Message}");
+            MessageBox.Show(
+                $"YubiKey reset failed:\n\n{ex.Message}\n\n" +
+                "Check that ykman is installed and only one YubiKey is plugged in.",
+                "Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         finally
         {

@@ -128,4 +128,11 @@ public class ReaderInfo
     public uint Number { get; init; }
     public string Name { get; init; } = string.Empty;
     public bool HasCard { get; init; }
+
+    /// <summary>
+    /// YubiKeys appear as e.g. "Yubico YubiKey OTP+FIDO+CCID 0"
+    /// </summary>
+    public bool IsYubiKey =>
+        Name.Contains("YubiKey", StringComparison.OrdinalIgnoreCase) ||
+        Name.Contains("Yubico", StringComparison.OrdinalIgnoreCase);
 }
