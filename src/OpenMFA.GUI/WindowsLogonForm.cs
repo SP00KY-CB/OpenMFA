@@ -1,16 +1,17 @@
 using System;
 using System.Windows.Forms;
+using OpenMFA.SmartCard;
 using OpenMFA.SmartCard.MyEid;
 using OpenMFA.SmartCard.YubiKey;
 
 namespace OpenMFA.GUI;
 
 /// <summary>
-/// Simplified GUI for MyEID card setup for Windows smart card logon
+/// Simplified GUI for MyEID card and YubiKey setup for Windows smart card logon
 /// </summary>
 public partial class WindowsLogonForm : Form
 {
-    private MyEidCard? _card;
+    private ISmartCard? _card;
     private uint? _readerNumber;
     private bool _isYubiKey;
 
@@ -319,19 +320,25 @@ public partial class WindowsLogonForm : Form
             if (readerNum.HasValue)
             {
                 _readerNumber = readerNum;
-                _card = new MyEidCard(_readerNumber);
-                _card.SetLogger(Log);
 
                 var readers = await CardReader.DetectReadersAsync(Log);
                 var reader = readers.FirstOrDefault(r => r.Number == readerNum);
                 _isYubiKey = reader?.IsYubiKey ?? false;
+
+                _card?.Dispose();
+                _card = _isYubiKey ? new YubiKeyCard() : new MyEidCard(_readerNumber);
+                _card.SetLogger(Log);
+                ApplyCardDefaults();
 
                 txtReaderStatus.Text = $"Reader {readerNum}: {reader?.Name ?? "Unknown"} - Card present";
                 txtReaderStatus.BackColor = System.Drawing.Color.LightGreen;
 
                 Log($"✓ Reader detected: {reader?.Name}");
                 if (_isYubiKey)
-                    Log("  YubiKey detected - ERASE Card will reset the PIV application using ykman");
+                {
+                    Log("  YubiKey detected - using ykman (PIV). PIN and PUK must be 6-8 characters.");
+                    Log("  SO PIN/PUK are not used: Initialize protects the management key with the PIN.");
+                }
 
                 // Enable operations
                 btnInitialize.Enabled = true;
@@ -359,6 +366,22 @@ public partial class WindowsLogonForm : Form
         {
             btnDetect.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// YubiKey PIV uses 6-8 character PIN/PUK and has no SO-PIN/SO-PUK
+    /// </summary>
+    private void ApplyCardDefaults()
+    {
+        var pin = _isYubiKey ? "123456" : "1111";
+
+        txtUserPin.Text = pin;
+        txtUserPuk.Text = _isYubiKey ? "12345678" : "111111";
+        txtKeyPin.Text = pin;
+        txtCertPin.Text = pin;
+
+        lblSoPin.Enabled = txtSoPin.Enabled = !_isYubiKey;
+        lblSoPuk.Enabled = txtSoPuk.Enabled = !_isYubiKey;
     }
 
     private async void BtnInitialize_Click(object? sender, EventArgs e)
@@ -392,6 +415,8 @@ public partial class WindowsLogonForm : Form
                 txtSoPin.Text,
                 txtSoPuk.Text);
             Log("✓ Card initialized successfully!");
+            txtKeyPin.Text = txtUserPin.Text;
+            txtCertPin.Text = txtUserPin.Text;
             MessageBox.Show("Card initialized successfully!\n\nYou can now generate a key pair.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -530,11 +555,10 @@ public partial class WindowsLogonForm : Form
             btnErase.Enabled = false;
             Log("=== Resetting YubiKey PIV ===");
 
-            var yubiKey = new YubiKeyPiv();
-            yubiKey.SetLogger(Log);
-            await yubiKey.ResetAsync(CancellationToken.None);
+            await _card!.EraseAsync(null, CancellationToken.None);
 
             Log("✓ YubiKey PIV reset successfully");
+            ApplyCardDefaults();
             MessageBox.Show(
                 "YubiKey PIV reset successfully!\n\n" +
                 "PIN: 123456\nPUK: 12345678\nManagement key: default",
@@ -768,9 +792,11 @@ public partial class WindowsLogonForm : Form
             }
 
             Log($"Generating CSR for CN={cn}, UPN={upnValue}");
-            Log($"This will use the key with ID 01 on the card");
+            Log(_isYubiKey
+                ? "This will use the key in slot 9A on the YubiKey"
+                : "This will use the key with ID 01 on the card");
 
-            await _card.GenerateCSRAsync(cn, upnValue, saveDialog.FileName, CancellationToken.None);
+            await _card.GenerateCSRAsync(cn, upnValue, saveDialog.FileName, txtCertPin.Text, CancellationToken.None);
 
             Log($"✓ CSR generated successfully!");
             Log($"Saved to: {saveDialog.FileName}");

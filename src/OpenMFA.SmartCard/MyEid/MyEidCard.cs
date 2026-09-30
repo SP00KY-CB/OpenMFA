@@ -7,7 +7,7 @@ namespace OpenMFA.SmartCard.MyEid;
 /// MyEID 4.5 smart card operations for Windows smart card logon.
 /// Uses OpenSC's PKCS#15 tools (pkcs15-init, pkcs15-tool) which are officially supported.
 /// </summary>
-public class MyEidCard : IDisposable
+public class MyEidCard : ISmartCard
 {
     private readonly string _pkcs15InitPath;
     private readonly string _pkcs15ToolPath;
@@ -126,11 +126,13 @@ public class MyEidCard : IDisposable
     /// Generate a Certificate Signing Request (CSR) from the key on the card.
     /// The CSR includes the UPN in Subject Alternative Name for Windows smart card logon.
     /// Uses Windows certreq to create CSR from existing smart card key.
+    /// The PIN is entered in the Windows prompt, so <paramref name="pin"/> is unused.
     /// </summary>
     public async Task GenerateCSRAsync(
         string commonName,
         string upn,
         string outputPath,
+        string pin,
         CancellationToken ct = default)
     {
         // Use Windows certreq which can interact with smart card provider
